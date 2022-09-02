@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>draw</title>
+
+    <style>
+        body {
+            background-color: wheat;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+
+        .center {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 1em;
+            margin: 10em;
+        }
+
+        canvas {
+            background-color: black;
+        }
+
+        .pframe {
+            background-image: url("https://i.pinimg.com/originals/1b/e3/a1/1be3a1d7dc3c8b1230f5742869ed21a4.png");
+            width: 320px;
+            height: 480px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            position: absolute;
+            top: calc(10em + 100px);
+            transform: scale(1.45, 1.75);
+            z-index: -1;
+        }
+
+        .actions {
+            padding-top: 5em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1em;
+        }
+
+        #send {
+            padding: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="center">
+        <canvas id="canvas" width="320" height="480">
+        </canvas>
+        <div class="pframe"></div>
+        <div class="actions">
+            <input type="color" id="colorpicker" value="#ffffff">
+            <button type="button" id="clear">Clear</button>
+            <button type="button" id="send">Show it on my desk!</button>
+        </div>
+        <p>
+            Express yourself!
+            <br>
+            Anything you draw gets sent to a real life
+            Arduino hooked up to a tiny LCD display on my desk.
+            <br>I get to see exactly what you've drawn!
+        </p>
+    </div>
+    <script async defer>
+        const canvas = document.getElementById('canvas');
+        const colorpicker = document.getElementById('colorpicker');
+        const send_button = document.getElementById('send');
+        const clear = document.getElementById('clear');
+        const ctx = canvas.getContext('2d');
+
+        var moves = []
+        let down = false;
+
+        ctx.fillStyle = colorpicker.value;
+        colorpicker.onchange = async function (e) {
+            ctx.fillStyle = e.target.value;
+        }
+
+        async function drawAt(x, y) {
+            ctx.beginPath();
+            ctx.arc(x, y, 10, 0, 2 * Math.PI);
+            ctx.fill();
+
+            moves.push([x, y, colorpicker.value]);
+        }
+
+        canvas.onmousemove = async function (e) {
+            if (down) {
+                drawAt(e.offsetX, e.offsetY);
+            }
+        };
+
+        canvas.ontouchmove = async function (e) {
+            e.preventDefault();
+            var rect = e.target.getBoundingClientRect();
+            var x = Math.round(e.targetTouches[0].clientX - rect.left);
+            var y = Math.round(e.targetTouches[0].clientY - rect.top);
+            drawAt(x, y);
+        };
+
+        document.addEventListener('mousedown', () => down = true);
+        document.addEventListener('mouseup', () => down = false);
+        document.addEventListener('ontouchstart', () => down = true);
+        document.addEventListener('ontouchend', () => down = false);
+
+        send_button.onclick = async function (e) {
+            send_button.disabled = true;
+
+            await fetch('/draw', {
+                method: 'POST',
+                cache: 'no-cache',
+                body: JSON.stringify({
+                    moves
+                    // test: "hello!!!!"
+                }),
+                headers: {
+                    'Content-Type': "application/json"
+                },
+                // mode: "same-origin"
+            });
+
+            // moves = []
+            setTimeout(() => {
+                send_button.disabled = undefined;
+            }, 10000);
+        }
+
+        clear.onclick = async function (e) {
+            moves = [];
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+    </script>
+</body>
+
+</html>
