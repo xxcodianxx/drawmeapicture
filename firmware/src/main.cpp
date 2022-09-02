@@ -81,8 +81,11 @@ void loop()
     Serial.write("\1"); // ack
   } else {
     Serial.write("\2"); // retransmit
+    free(bytes);
     return;
   }
+
+  free(bytes);
 
   if (call.x == 1 && call.y == 1 && call.color == 0x0101) {
     tft.fillScreen(TFT_BLACK);
