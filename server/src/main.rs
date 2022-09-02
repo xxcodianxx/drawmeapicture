@@ -2,23 +2,19 @@ use actix_files::NamedFile;
 use actix_web::{post, web, App, HttpRequest, HttpServer, Responder, Result};
 
 use colors_transform::Color;
-use log::{info, debug, warn};
+use log::{debug, info, warn};
 use rgb565::Rgb565;
 
 use serde::Deserialize;
 
-use std::time::Duration;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 #[derive(Deserialize)]
 struct MoveRequest {
     // test: String,
     moves: Vec<(u16, u16, String)>,
-}
-
-async fn index(req: HttpRequest) -> Result<NamedFile> {
-    Ok(NamedFile::open("index.html")?)
 }
 
 #[post("/draw")]
@@ -37,8 +33,9 @@ async fn draw(
 
         info!("Drawing from {}... ({} calls)", ipaddr, json.moves.len());
 
-        // clear everything
-        serial.write_all(&pixel(1, 1, &[1, 1]));
+        serial
+            .write_all(&make_drawcall_buffer(1, 1, &[1, 1])) // 0x01 0x01 0x01 0x01 (clear screen)
+            .expect("could not write clear screen command, aborting");
 
         json.moves.iter().for_each(|(x, y, hex_color)| {
             let color = colors_transform::Rgb::from_hex_str(hex_color).unwrap();
@@ -50,17 +47,17 @@ async fn draw(
             )
             .to_rgb565_le();
 
-            let pix = pixel(
-                *x, // v[0].as_i64().unwrap() as u16,
-                *y, // v[1].as_i64().unwrap() as u16,
-                &color,
-            );
+            let drawcall = make_drawcall_buffer(*x, *y, &color);
 
             loop {
-                serial.write_all(&pix);
+                serial
+                    .write_all(&drawcall)
+                    .expect("could not write drawcall, aborting");
 
                 let mut resp = [0u8];
-                serial.read(&mut resp);
+                serial
+                    .read(&mut resp)
+                    .expect("could not read drawcall ack, aborting");
 
                 match resp[0] {
                     0x01 => {
@@ -80,6 +77,10 @@ async fn draw(
     });
 
     return "ok";
+}
+
+async fn index() -> Result<NamedFile> {
+    Ok(NamedFile::open("index.html")?)
 }
 
 #[tokio::main]
@@ -160,7 +161,7 @@ impl Screen {
     }
 }
 
-fn pixel(x: u16, y: u16, color: &[u8; 2]) -> [u8; 10] {
+fn make_drawcall_buffer(x: u16, y: u16, color: &[u8; 2]) -> [u8; 10] {
     let mut buf = [0u8; 10];
 
     buf[0..2].copy_from_slice(&x.to_le_bytes());
